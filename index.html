@@ -1,0 +1,1636 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTDVKH · Operations Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb; --card-bg: #ffffff; --text: #1f2a44; --muted: #6b7690;
+      --border: #e3e8f1; --accent: #40528f; --accent-light: #eef1f9;
+      --green: #2f7d55; --green-bg: #e3f3ea; --yellow: #9a6b12; --yellow-bg: #fcf1cf;
+      --red: #b4473f; --red-bg: #fbebe9; --red-light: #efcbc7;
+      --shadow: 0 1px 2px rgba(64, 82, 143, .06);
+      --shadow-md: 0 4px 12px rgba(64, 82, 143, .08);
+      --radius: 12px; --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 14px/1.5 "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+      font-variant-numeric: tabular-nums; min-height: 100vh;
+    }
+    .navbar { background: var(--card-bg); border-bottom: 1px solid var(--border); box-shadow: var(--shadow); position: sticky; top: 0; z-index: 100; }
+    .navbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 4px; height: 56px; overflow-x: auto; }
+    .navbar-brand { font-weight: 700; font-size: 15px; color: var(--accent); white-space: nowrap; margin-right: 16px; display: flex; align-items: center; gap: 6px; }
+    .navbar-brand::before { content: "📊"; font-size: 18px; }
+    .tab-btn { appearance: none; border: none; background: transparent; padding: 8px 16px; border-radius: var(--radius-sm); font: inherit; font-size: 13.5px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; transition: all 0.15s ease; }
+    .tab-btn:hover { background: var(--accent-light); color: var(--accent); }
+    .tab-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+    .app-container { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .card-header { font-size: 15px; font-weight: 600; color: var(--accent); margin: 20px 0 10px; display: flex; align-items: center; gap: 6px; }
+    .card-header:first-child { margin-top: 0; }
+    .text-muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .hidden { display: none !important; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .toolbar label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+    select, input[type="text"], input[type="number"], input[type="date"], input[type="month"], button, textarea { font: inherit; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card-bg); color: var(--text); }
+    select:focus-visible, input:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    button { cursor: pointer; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); padding: 7px 16px; font-size: 13px; font-weight: 600; }
+    button.primary:hover { background: #35467a; }
+    button.secondary { background: var(--card-bg); color: var(--text); border-color: var(--border); font-weight: 500; }
+    button.secondary:hover { background: var(--accent-light); }
+    .dropzone { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 16px 8px 8px; border: 2px dashed var(--border); border-radius: var(--radius); background: var(--card-bg); cursor: pointer; transition: all 0.15s ease; }
+    .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-light); }
+    .dropzone .btn-upload { padding: 7px 16px; border-radius: 7px; background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; border: none; pointer-events: none; }
+    .dropzone .hint { color: var(--muted); font-size: 12.5px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .kpi-card { display: flex; flex-direction: column; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .kpi-card .kpi-label { font-size: 12px; color: var(--muted); min-height: 2.6em; line-height: 1.4; }
+    .kpi-card .kpi-value { font-size: 24px; font-weight: 650; line-height: 1.25; margin: 2px 0; }
+    .kpi-card .kpi-sub { font-size: 12px; color: var(--muted); }
+    .kpi-card.sla { background: var(--accent-light); }
+    .kpi-card.sla .kpi-value { color: var(--accent); }
+    .kpi-card.warn { border-color: var(--red-light); background: var(--red-bg); }
+    .kpi-card.warn .kpi-value { color: var(--red); }
+    .kpi-card.hero { border-top: 3px solid var(--accent); }
+    .kpi-card.hero.safe { border-top-color: var(--green); }
+    .kpi-card.hero.safe .kpi-value { color: var(--green); }
+    .kpi-card.hero.amber { border-top-color: var(--yellow); background: var(--yellow-bg); }
+    .kpi-card.hero.amber .kpi-value { color: var(--yellow); }
+    .kpi-card.pct .kpi-value { font-size: 36px; line-height: 1.1; margin: 4px 0; }
+    .alert-banner { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; background: var(--red-bg); border: 1px solid var(--red-light); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; color: var(--red); }
+    .alert-banner a, .alert-banner span { background: var(--card-bg); border: 1px solid var(--red-light); color: var(--red); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; text-decoration: none; }
+    .alert-banner a:hover { background: var(--red); color: var(--card-bg); }
+    .alert-banner.ok { background: var(--green-bg); border-color: transparent; color: var(--green); }
+    .alert-banner.info { background: var(--accent-light); border-color: var(--border); color: var(--accent); }
+    .table-wrap { overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; }
+    th { background: var(--accent-light); color: var(--accent); font-weight: 600; padding: 8px 10px; text-align: center; white-space: normal; position: sticky; top: 0; border-bottom: 1px solid var(--border); }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+    td:first-child, td.left { text-align: left; }
+    td.wrap { text-align: left; white-space: normal; word-break: break-word; min-width: 140px; }
+    tr.total td { font-weight: 700; background: var(--accent-light); }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: var(--accent-light); }
+    tr.active td { background: var(--accent-light); font-weight: 600; }
+    tr.active td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+    tr.muted td { color: var(--muted); }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 12px; }
+    .pill.red { background: var(--red-bg); color: var(--red); }
+    .bar { display: inline-block; height: 6px; background: var(--accent); border-radius: 3px; vertical-align: middle; margin-left: 6px; }
+    .err { background: var(--red-bg); color: var(--red); padding: 10px 12px; border-radius: var(--radius-sm); margin-top: 10px; }
+    details.collapse { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    details.collapse summary { cursor: pointer; font-weight: 600; color: var(--accent); font-size: 13.5px; list-style: none; }
+    details.collapse summary::-webkit-details-marker { display: none; }
+    details.collapse summary::before { content: "▸ "; display: inline-block; transition: transform 0.2s; }
+    details.collapse[open] summary::before { content: "▾ "; }
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .chart-card h4 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+    .cl-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .cl-toolbar label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+    .cl-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .cl-stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); }
+    .cl-stat-card .label { font-size: 12px; color: var(--muted); }
+    .cl-stat-card .value { font-size: 26px; font-weight: 650; margin-top: 4px; }
+    .cl-stat-card.accent { background: var(--accent-light); }
+    .cl-stat-card.accent .value { color: var(--accent); }
+    .cl-stat-card.success { background: var(--green-bg); }
+    .cl-stat-card.success .value { color: var(--green); }
+    .cl-table-wrap { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+    .cl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .cl-table thead th { background: var(--accent-light); color: var(--accent); padding: 10px 12px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 1px solid var(--border); }
+    .cl-table tbody td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .cl-table tbody tr:hover { background: #fafbfd; }
+    .cl-table tbody tr.completed { background: #f4faf6; }
+    .cl-table tbody tr.completed .task-text { text-decoration: line-through; opacity: 0.6; }
+    .cl-table input[type="text"], .cl-table textarea { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text); resize: vertical; transition: border-color 0.15s, background 0.15s; }
+    .cl-table input[type="text"]:hover, .cl-table textarea:hover { border-color: var(--border); background: #fff; }
+    .cl-table input[type="text"]:focus, .cl-table textarea:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(64,82,143,0.1); }
+    .cl-table textarea { min-height: 34px; }
+    .cl-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+    .cl-date-input { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+    .cl-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+    .cl-toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0; transform: translateY(10px); transition: all 0.25s; z-index: 1000; pointer-events: none; }
+    .cl-toast.show { opacity: 1; transform: translateY(0); }
+    .cl-toast.error { background: var(--red); }
+    .cl-toast.success { background: var(--green); }
+    .cl-row-delete { background: transparent; border: none; color: var(--red); cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 6px; line-height: 1; }
+    .cl-row-delete:hover { background: var(--red-bg); }
+    .cl-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .cl-badge.done { background: var(--green-bg); color: var(--green); }
+    .cl-badge.pending { background: var(--yellow-bg); color: var(--yellow); }
+    @media (max-width: 768px) {
+      .navbar-inner { height: auto; padding: 8px 12px; flex-wrap: wrap; }
+      .navbar-brand { margin-right: 8px; margin-bottom: 4px; }
+      .tab-btn { padding: 6px 12px; font-size: 12.5px; }
+      .kpi-card .kpi-value { font-size: 20px; }
+      .kpi-card.pct .kpi-value { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-brand">TTDVKH · Operations</div>
+      <button class="tab-btn active" data-tab="tab1">📋 Dashboard Hằng Ngày</button>
+      <button class="tab-btn" data-tab="tab2">📅 Dashboard Tuần</button>
+      <button class="tab-btn" data-tab="tab3">📆 Dashboard Tháng</button>
+      <button class="tab-btn" data-tab="tab4">✅ Checklist Ca Trực</button>
+    </div>
+  </nav>
+
+  <div class="app-container">
+
+    <div id="tab1" class="tab-pane active">
+      <div id="uploadSection">
+        <label class="dropzone" id="dropZone">
+          <input id="fileInput" type="file" accept=".xlsx,.xls" multiple hidden>
+          <span class="btn-upload">Chọn file</span>
+          <span class="hint">hoặc kéo thả file "Lịch sử xử lý cảnh báo" (.xlsx) vào đây — có thể chọn nhiều file</span>
+        </label>
+        <div id="uploadError"></div>
+      </div>
+
+      <div id="appSection" class="hidden">
+        <div class="toolbar">
+          <div><b id="fileNameInfo"></b></div>
+          <label>Ngày <select id="filterDay"></select></label>
+          <label>Khung giờ <select id="filterHour"><option value="">Cả ngày</option></select></label>
+          <label>Tính hiệu suất theo
+            <select id="filterBy">
+              <option value="nv">Nhân viên xử lý (cột TTDVKH)</option>
+              <option value="z">Người kết luận (từ nhật ký)</option>
+            </select>
+          </label>
+          <label>Tìm nhân viên <input id="filterStaff" type="text" placeholder="Nhập tên..."></label>
+          <label>Tra cứu mã tin <input id="filterCode" type="text" placeholder="vd 1239847"></label>
+          <label>Ngưỡng cơ sở nhiều tin <input id="threshold10" type="number" value="10" min="1" style="width:80px"></label>
+          <label>Ngưỡng tin không xác minh <input id="thresholdU3" type="number" value="3" min="1" style="width:80px"></label>
+          <button class="primary" id="btnExport">Xuất Excel</button>
+          <button class="primary" id="btnNewFile">Tải file mới</button>
+        </div>
+
+        <div id="lookupResultCard" class="hidden"></div>
+
+        <div class="card">
+          <b>Mã tin có cháy thật (đã khử trùng)</b>
+          <textarea id="fireIds" rows="2" style="width:100%;margin-top:6px;font:inherit;padding:6px 10px;border:1px solid var(--border);border-radius:8px;" placeholder="vd 0__1265703, 0__1257201"></textarea>
+          <div class="text-muted" style="margin-top:6px;">
+            <span id="suggestionInfo"></span>
+            <button id="btnFillSuggestion" class="secondary" style="margin-left:8px;padding:2px 12px;font-size:12px;">Điền gợi ý</button>
+          </div>
+        </div>
+
+        <div id="mainDashboard"></div>
+      </div>
+    </div>
+
+    <div id="tab2" class="tab-pane">
+      <div class="card">
+        <div class="card-header">📅 Dashboard theo tuần</div>
+        <p class="text-muted" style="margin-bottom:16px;">Thống kê từ Thứ Hai đến Chủ Nhật · So sánh tuần hiện tại & tuần trước (pw).</p>
+        <div id="weekSummary" class="kpi-grid">
+          <div class="text-muted" style="padding:20px;text-align:center;">Chưa có dữ liệu — hãy nạp file Excel ở Tab 1.</div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>Khối lượng tin theo ngày trong tuần</h4>
+          <canvas id="chartWeekDays" height="200"></canvas>
+        </div>
+        <div class="chart-card">
+          <h4>Bảng tóm tắt tuần</h4>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Ngày</th><th>Số tin</th><th>SLA ≤90s</th></tr></thead>
+              <tbody id="weekTableBody">
+                <tr><td colspan="3" class="text-muted" style="text-align:center;">Chưa có dữ liệu</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab3" class="tab-pane">
+      <div class="card">
+        <div class="card-header">📆 Dashboard theo tháng</div>
+        <p class="text-muted" style="margin-bottom:16px;">Tổng hợp lũy kế, SLA tổng thể, xu hướng tuần/tháng và cơ sở nhiều sự cố.</p>
+        <div id="monthSummary" class="kpi-grid">
+          <div class="text-muted" style="padding:20px;text-align:center;">Chưa có dữ liệu — hãy nạp file Excel ở Tab 1.</div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h4>Xu hướng SLA theo tuần trong tháng</h4>
+          <canvas id="chartMonthTrend" height="200"></canvas>
+        </div>
+        <div class="chart-card">
+          <h4>Top cơ sở phát sinh sự cố</h4>
+          <canvas id="chartTopSites" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab4" class="tab-pane">
+      <div class="card">
+        <div class="card-header">✅ Checklist công việc ca trực</div>
+        <p class="text-muted" style="margin-bottom:16px;">Kết nối Supabase · Tự động lưu khi thay đổi · Thống kê hiệu suất theo tháng</p>
+      </div>
+
+      <div class="cl-stats" id="clStats">
+        <div class="cl-stat-card accent">
+          <div class="label">Tổng task tháng này</div>
+          <div class="value" id="clStatTotal">—</div>
+        </div>
+        <div class="cl-stat-card success">
+          <div class="label">Đã hoàn thành</div>
+          <div class="value" id="clStatDone">—</div>
+        </div>
+        <div class="cl-stat-card">
+          <div class="label">Tỷ lệ hoàn thành</div>
+          <div class="value" id="clStatRate">—</div>
+        </div>
+        <div class="cl-stat-card">
+          <div class="label">Số ngày có ca trực</div>
+          <div class="value" id="clStatDays">—</div>
+        </div>
+      </div>
+
+      <div class="cl-toolbar">
+        <label>Tháng <input type="month" id="clMonthFilter"></label>
+        <label>Ngày (tuỳ chọn) <input type="date" id="clDayFilter"></label>
+        <button class="secondary" id="clBtnClearDay">Xoá lọc ngày</button>
+        <button class="primary" id="clBtnAddRow">+ Thêm task mới</button>
+        <button class="primary" id="clBtnRepeat" style="background:#2f7d55;border-color:#2f7d55;">🔄 Tạo danh sách mẫu hằng ngày</button>
+        <button class="secondary" id="clBtnRefresh">↻ Tải lại</button>
+        <span id="clStatusInfo" style="font-size:12px;color:var(--muted);margin-left:auto;"></span>
+      </div>
+
+      <div class="cl-table-wrap">
+        <table class="cl-table">
+          <thead>
+            <tr>
+              <th style="width:130px;">Ngày</th>
+              <th>Task</th>
+              <th style="width:110px;text-align:center;">Trạng thái</th>
+              <th style="width:280px;">Note (Ghi chú)</th>
+              <th style="width:44px;"></th>
+            </tr>
+          </thead>
+          <tbody id="clTableBody">
+            <tr><td colspan="5" class="cl-empty">Đang tải dữ liệu...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="cl-toast" id="clToast"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ============================================================
+     SUPABASE CLIENT
+     ============================================================ */
+  const SUPABASE_URL = 'https://ttapcyqyheanjizvjrul.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_b38_chJX74DH6Q5dPMbdMw_-91ctlIC';
+
+  let _supabase = null;
+  try {
+    const { createClient } = supabase;
+    _supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('[Supabase] Client initialized successfully.');
+  } catch (e) {
+    console.error('[Supabase] init error:', e);
+  }
+  const TABLE = 'checklist_logs';
+
+  /* ============================================================
+     TAB SWITCHING
+     ============================================================ */
+  const tabButtons = document.querySelectorAll('.tab-btn');
+  const tabPanes = document.querySelectorAll('.tab-pane');
+
+  function switchTab(tabId) {
+    tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+    tabPanes.forEach(pane => pane.classList.toggle('active', pane.id === tabId));
+    if (tabId === 'tab2') renderWeekTab();
+    if (tabId === 'tab3') renderMonthTab();
+    if (tabId === 'tab4') initTab4();
+  }
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  /* ============================================================
+     TAB 1 — DAILY DASHBOARD
+     ============================================================ */
+  let BY = 'nv';
+  const SHOW = [1, 2];
+  const TH = { sla: 90, few: 10, ms: [60, 90, 180, 240, 300], f10: 10, u3: 3, c3: 3 };
+  const CASES = { 'C1': 1, 'C2': 1, 'C3': 1, 'HC': 1, 'Không tính': 1 };
+  const SHIFTS = ['C1', 'C2', 'C3', 'HC'];
+  const CT = {};
+  const PAT = [
+    ' - không có cháy - ',
+    ' - không có cháy (xác minh chậm) - ',
+    ' - có cháy - ',
+    ' - có cháy (xác minh chậm) - ',
+    ' - không có xác minh - '
+  ];
+
+  const $ = id => document.getElementById(id);
+  const nrm = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  const nz = v => {
+    if (v == null) return null;
+    const s = String(v).replace(/ giây/g, '').trim();
+    if (s === '') return null;
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  };
+  const cleanCs = s => String(s == null ? '' : s).replace(/[\x00-\x1f]/g, '').replace(/ +/g, ' ').replace(/^ | $/g, '');
+  const tms = s => {
+    const m = /(\d{2}):(\d{2}):(\d{2}) (\d{2})\/(\d{2})\/(\d{4})/.exec(s || '');
+    return m ? Date.UTC(+m[6], +m[5] - 1, +m[4], +m[1], +m[2], +m[3]) : 0;
+  };
+  const prevDay = s => {
+    const d = new Date(s + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const caOf = h => h == null ? '' : (h >= 22 || h < 6) ? 'Ca 3' : h < 14 ? 'Ca 1' : 'Ca 2';
+  const inShift = (lab, e) => {
+    const h = e.h;
+    if (h == null) return false;
+    return lab === 'C1' ? (h >= 6 && h < 14) :
+           lab === 'C2' ? (h >= 14 && h < 22) :
+           lab === 'C3' ? (h >= 22 || h < 6) :
+           lab === 'HC' ? (h >= 8 && h < 17) : false;
+  };
+  const fdt = g => g ? g.split('-').reverse().join('/') : '';
+  const esc = s => String(s).replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
+  const pc = (a, b) => b ? (a / b * 100).toFixed(1) + '%' : '–';
+  const hl = h => String(h).padStart(2, '0') + ':00–' + String((+h + 1) % 24).padStart(2, '0') + ':00';
+
+  function buildRows(aoa) {
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(10, aoa.length); i++) {
+      if (String(aoa[i][0]).trim() === 'STT') { headerRow = i; break; }
+    }
+    if (headerRow < 0) throw 'Không tìm thấy dòng tiêu đề (ô đầu tiên là "STT") trong 10 dòng đầu.';
+
+    const headers = aoa[headerRow].map(x => nrm(x).toLowerCase());
+    const H = {
+      ma: 'mã sự kiện', xl: 'loại xử lý', cs: 'cơ sở', tg: 'thời gian nhận tin',
+      nv: 'tên nhân viên ttdvkh xử lý', l: 'thời gian xử lý ( ttdvkh )',
+      tt: 'nội dung xử lý ( ttdvkh )', q: 'thời gian xử lý (app)', st: 'trạng thái'
+    };
+    const col = {};
+    const missing = [];
+    for (const k in H) {
+      const idx = headers.indexOf(H[k]);
+      if (idx < 0) missing.push(H[k]);
+      col[k] = idx;
+    }
+    if (missing.length) throw 'Thiếu cột: ' + missing.join('; ');
+
+    col.ap = headers.findIndex(x => x.replace(/[\s()]/g, '') === 'nộidungapp');
+    col.tb = ['serial number', 'serial no', 'serial', 'số serial']
+      .map(x => headers.indexOf(x)).find(i => i >= 0);
+    if (col.tb == null) col.tb = headers.findIndex(x => x.includes('serial'));
+
+    const out = [];
+    for (const r of aoa.slice(headerRow + 1)) {
+      const ma = nrm(r[col.ma]);
+      if (!ma) continue;
+      const m = /^\s*(\d{2}):(\d{2}):(\d{2}) (\d{2})\/(\d{2})\/(\d{4})/.exec(String(r[col.tg]));
+      const hr = m ? +m[1] : null;
+      const xl = nrm(r[col.xl]).toLowerCase();
+      const nv = nrm(r[col.nv]);
+      const lines = String(r[col.tt] == null ? '' : r[col.tt]).replace(/\r/g, '').split('\n');
+      const lowerLines = lines.map(x => x.toLowerCase());
+      const conclusionLine = lines.find((x, i) => PAT.some(p => lowerLines[i].includes(p)));
+
+      let z = nv;
+      if (conclusionLine) {
+        const parts = conclusionLine.split(' - ');
+        if (parts.length > 1) z = nrm(parts[parts.length - 1]);
+      }
+
+      const lowerJoined = lowerLines.join('\n');
+      const posFire = lowerJoined.indexOf(' - có cháy');
+      const posNoFire = lowerJoined.indexOf(' - không có cháy');
+
+      const minT = arr => {
+        const v = arr.map(tms).filter(t => t > 0);
+        return v.length ? Math.min(...v) : null;
+      };
+      const tNhanTin = tms(nrm(r[col.tg])) || null;
+      const appTxt = col.ap >= 0 ? String(r[col.ap] == null ? '' : r[col.ap]).replace(/\r/g, '') : '';
+      const tHoanThanh = minT(lines.filter(x => /đã hoàn thành tiếp nhận xử lý tin/i.test(x)));
+
+      let kenh = '';
+      let tgxl = null;
+
+      const tApp = minT(appTxt.split('\n').filter(x => /đã xác minh là/i.test(x)));
+      if (tApp != null && tHoanThanh != null && tNhanTin != null) {
+        kenh = 'App';
+        tgxl = Math.round((tHoanThanh - tNhanTin) / 1000);
+      } else {
+        const tStaff = minT(lines.filter(x => PAT.slice(0, 4).some(p => x.toLowerCase().includes(p))));
+        if (tStaff != null && tHoanThanh != null && tNhanTin != null) {
+          kenh = 'Tổng đài';
+          tgxl = Math.round((tHoanThanh - tNhanTin) / 1000);
+        }
+      }
+
+      const conclusionLines = lines.filter((x, i) => PAT.some(p => lowerLines[i].includes(p)));
+      const lastConclusion = conclusionLines.reduce((best, x) => {
+        return best == null || tms(x) > tms(best) ? x : best;
+      }, null);
+      const cfUnv = xl.includes('có cháy') && !xl.includes('không có cháy') &&
+                    !!lastConclusion && lastConclusion.toLowerCase().includes(' - không có xác minh - ');
+
+      out.push({
+        zk: z, ma, tg: nrm(r[col.tg]),
+        ng: m ? (hr < 6 ? prevDay(m[6] + '-' + m[5] + '-' + m[4]) : m[6] + '-' + m[5] + '-' + m[4]) : '',
+        ca: caOf(hr), h: hr, nv, z, cs: cleanCs(r[col.cs]),
+        tb: col.tb < 0 ? '' : nrm(r[col.tb]),
+        unv: !kenh, cfUnv, kenh, tgxl,
+        log: String(r[col.tt] == null ? '' : r[col.tt]).replace(/\r/g, ''),
+        l: nz(r[col.l]), q: null,
+        fin: nrm(r[col.st]).toLowerCase() === 'kết thúc',
+        sug: lowerJoined.includes('đã hoàn thành tiếp nhận xử lý tin') &&
+             (posFire < 0 ? 1e99 : posFire) < (posNoFire < 0 ? 1e99 : posNoFire)
+      });
+    }
+    return out;
+  }
+
+  function suggestFireIds(list) {
+    const last = {};
+    const out = [];
+    list.filter(e => e.sug).sort((a, b) => tms(a.tg) - tms(b.tg)).forEach(e => {
+      const key = (e.tb || e.cs).toLowerCase();
+      const t = tms(e.tg);
+      if (last[key] == null || t - last[key] > 3600000) out.push(e.ma);
+      last[key] = t;
+    });
+    return out;
+  }
+
+  function deriveResults(events, fireIdSet) {
+    events.forEach(e => {
+      e.z = (BY === 'nv' && e.nv) ? e.nv : e.zk;
+      e.kq = fireIdSet.has(e.ma) ? 'Có cháy' : e.unv ? 'Không xác minh' : 'Không có cháy';
+      e.u = e.unv ? null : e.tgxl;
+      e.sla = !e.ng ? '' : e.unv ? 'Không xác minh' :
+              (e.u == null || e.u < 0) ? 'Thiếu thời gian' :
+              e.u <= TH.sla ? 'Đạt' : 'Chậm';
+    });
+  }
+
+  function computeStats(list) {
+    const o = { n: list.length, cc: 0, kxm: 0, kcc: 0, dat: 0, cham: 0, thieu: 0, ok: 0, ms: TH.ms.map(() => 0) };
+    const facilities = new Set();
+    const facUnv = new Set();
+    const cnt = {}, unvCnt = {}, nameMap = {}, tbMap = {}, tbUnvMap = {}, slowMap = {};
+
+    list.forEach(e => {
+      const key = e.cs.toLowerCase();
+      if (e.kq === 'Có cháy') o.cc++;
+      else if (e.kq === 'Không xác minh') { o.kxm++; facUnv.add(key); unvCnt[key] = (unvCnt[key] || 0) + 1; }
+      else o.kcc++;
+
+      if (e.sla === 'Đạt') o.dat++;
+      else if (e.sla === 'Chậm') o.cham++;
+      else if (e.sla === 'Thiếu thời gian') o.thieu++;
+
+      if (e.sla === 'Đạt' || e.sla === 'Chậm') {
+        o.ok++;
+        TH.ms.forEach((m, i) => { if (e.u <= m) o.ms[i]++; });
+      }
+
+      facilities.add(key);
+      cnt[key] = (cnt[key] || 0) + 1;
+      nameMap[key] = nameMap[key] || e.cs;
+      if (e.sla === 'Chậm') (slowMap[key] = slowMap[key] || []).push(e);
+      if (e.tb) {
+        (tbMap[key] = tbMap[key] || new Set()).add(e.tb);
+        if (e.kq === 'Không xác minh') (tbUnvMap[key] = tbUnvMap[key] || new Set()).add(e.tb);
+      }
+    });
+
+    o.fac = facilities.size;
+    o.fu = facUnv.size;
+    o.src = o.dat + o.cham + o.thieu + o.kxm;
+
+    o.fl = Object.keys(cnt).filter(k => cnt[k] > TH.f10).map(k => ({
+      n: nameMap[k], c: cnt[k], u: unvCnt[k] || 0, tb: [...(tbMap[k] || [])].sort().join(', ')
+    })).sort((a, b) => b.c - a.c);
+
+    o.fx = Object.keys(unvCnt).filter(k => unvCnt[k] > TH.u3).map(k => ({
+      n: nameMap[k], u: unvCnt[k], c: cnt[k], tb: [...(tbUnvMap[k] || [])].sort().join(', ')
+    })).sort((a, b) => b.u - a.u || b.c - a.c);
+
+    o.fs = Object.keys(slowMap).filter(k => slowMap[k].length > TH.c3).map(k => ({
+      n: nameMap[k], s: slowMap[k].length, c: cnt[k], mx: Math.max(...slowMap[k].map(e => e.u)),
+      tb: [...new Set(slowMap[k].map(e => e.tb).filter(Boolean))].sort().join(', '),
+      ma: slowMap[k].map(e => e.ma).join(', ')
+    })).sort((a, b) => b.s - a.s || b.c - a.c);
+
+    o.fs3n = o.fs.length;
+    o.f10 = o.fl.length;
+    o.fu3n = o.fx.length;
+    o.m1 = o.ms[0];
+    o.m3 = o.ms[2];
+    o.m4 = o.ms[3];
+    o.m5 = o.ms[4];
+    return o;
+  }
+
+  function inferShift(staffEvents) {
+    if (/test|qc/i.test(staffEvents[0].z)) return 'Không tính';
+    let best = 'Không tính', bestCount = 0;
+    SHIFTS.forEach(shift => {
+      const c = staffEvents.filter(e => inShift(shift, e)).length;
+      if (c > bestCount) { bestCount = c; best = shift; }
+    });
+    return best;
+  }
+
+  function kpiCard(label, value, sub, warn, extraClass) {
+    return `<div class="kpi-card${warn ? ' warn' : ''}${extraClass ? ' ' + extraClass : ''}">
+      <span class="kpi-label">${label}</span>
+      <b class="kpi-value">${value}</b>
+      <span class="kpi-sub">${sub || ''}</span>
+    </div>`;
+  }
+
+  function msHeaders() { return SHOW.map(i => `<th>≤${TH.ms[i]}s</th>`).join(''); }
+  function msCells(x) { return SHOW.map(i => `<td>${x.ms[i]} (${pc(x.ms[i], x.n)})</td>`).join(''); }
+
+  function makeRemark(current, previous, isRate, unit) {
+    const diff = current - previous;
+    if (diff === 0) return 'Không đổi';
+    if (isRate) {
+      const rateDiff = (diff * 100).toFixed(1);
+      return (diff > 0 ? 'Tăng ' : 'Giảm ') + Math.abs(rateDiff) + '% SLA (' +
+             (diff > 0 ? 'Tăng ' : 'Giảm ') + Math.abs(diff * 100).toFixed(0) + ' tin)';
+    }
+    const pct = previous ? (Math.abs(diff) / previous * 100).toFixed(1) : '0.0';
+    return (diff > 0 ? 'Tăng ' : 'Giảm ') + Math.abs(diff).toLocaleString('vi-VN') +
+           ' ' + unit + ' (' + pct + '%)';
+  }
+
+  let allEvents = [];
+  let shiftOverrides = {};
+  let lookupOpen = false;
+
+  function render() {
+    if (!allEvents.length) return;
+
+    const fireIdSet = new Set(
+      ($('fireIds').value.match(/0__\d+|\d{5,}/g) || []).map(x => /^0__/.test(x) ? x : '0__' + x)
+    );
+    deriveResults(allEvents, fireIdSet);
+
+    const availableDays = [...new Set(allEvents.map(e => e.ng).filter(Boolean))].sort();
+    const selectedDay = $('filterDay').value || availableDays[availableDays.length - 1];
+    const dayEvents = allEvents.filter(e => e.ng === selectedDay);
+    const selectedHour = $('filterHour').value;
+    const hourOk = e => selectedHour === '' || e.h === +selectedHour;
+    const filteredEvents = dayEvents.filter(hourOk);
+    const stats = computeStats(filteredEvents);
+    const prevDayStr = availableDays.filter(d => d < selectedDay).pop();
+    const prevStats = prevDayStr ? computeStats(allEvents.filter(e => e.ng === prevDayStr && hourOk(e))) : null;
+
+    const sugg = suggestFireIds(dayEvents);
+    $('suggestionInfo').textContent = dayEvents.filter(e => e.sug).length
+      ? `Tự nhận diện ${dayEvents.filter(e => e.sug).length} tin có kết luận "Có cháy" → ${sugg.length} sự cố sau khử trùng (${sugg.slice(0, 8).join(', ')}${sugg.length > 8 ? '…' : ''})`
+      : 'Nhật ký không có tin nào có dòng kết luận "Có cháy".';
+
+    const compareRows = [
+      { label: 'Tổng tin', key: 'n', unit: 'tin', isRate: false },
+      { label: 'Sự cố cháy thật', key: 'cc', unit: 'tin', isRate: false },
+      { label: 'Tin không có cháy', key: 'kcc', unit: 'tin', isRate: false },
+      { label: 'Tin không xác minh', key: 'kxm', unit: 'tin', isRate: false },
+      { label: 'Đạt SLA ≤90s', key: 'm1', unit: 'tin', isRate: true, rateData: 'dat' },
+      { label: 'Đạt SLA ≤180s', key: 'm3', unit: 'tin', isRate: true, rateData: 'dat' },
+      { label: `Cơ sở >${TH.f10} tin`, key: 'f10', unit: 'cơ sở', isRate: false },
+      { label: `Cơ sở >${TH.u3} tin không xác minh`, key: 'fu3n', unit: 'cơ sở', isRate: false },
+      { label: `Tin xác minh chậm (>${TH.sla}s)`, key: 'cham', unit: 'tin', isRate: false },
+      { label: `Cơ sở >${TH.c3} tin xác minh chậm`, key: 'fs3n', unit: 'cơ sở', isRate: false }
+    ];
+
+    const compareHtml = compareRows.map(row => {
+      let prevDisplay, currDisplay, diffDisplay, remarkDisplay;
+      if (row.isRate) {
+        const prevRate = prevStats ? (prevStats[row.rateData] / prevStats.src * 100) : 0;
+        const currRate = (stats[row.rateData] / stats.src * 100);
+        prevDisplay = prevStats ? `${prevRate.toFixed(1)}% (${prevStats[row.rateData]} tin)` : '–';
+        currDisplay = `${currRate.toFixed(1)}% (${stats[row.rateData]} tin)`;
+        diffDisplay = prevStats ? `${(currRate - prevRate).toFixed(1)}%` : '–';
+        if (prevStats) {
+          const deltaRate = currRate - prevRate;
+          const deltaCount = stats[row.rateData] - prevStats[row.rateData];
+          remarkDisplay = `${deltaRate > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(deltaRate).toFixed(1)}% SLA (${deltaCount > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(deltaCount)} tin)`;
+        } else remarkDisplay = '';
+      } else {
+        prevDisplay = prevStats ? prevStats[row.key] : '–';
+        currDisplay = stats[row.key];
+        diffDisplay = prevStats ? (stats[row.key] - prevStats[row.key]) : '–';
+        remarkDisplay = prevStats ? makeRemark(stats[row.key], prevStats[row.key], false, row.unit) : '';
+      }
+      return `<tr>
+        <td class="left">${row.label}</td>
+        <td>${prevDisplay}</td>
+        <td>${currDisplay}</td>
+        <td>${diffDisplay}</td>
+        <td class="left">${remarkDisplay}</td>
+      </tr>`;
+    }).join('');
+
+    const channelCount = { 'App': 0, 'Tổng đài': 0, '': 0 };
+    filteredEvents.forEach(e => channelCount[e.kenh || '']++);
+
+    const channelKpiHtml = `
+      ${kpiCard('KH xác minh qua App', channelCount['App'].toLocaleString('vi-VN'), pc(channelCount['App'], filteredEvents.length) + ' tổng tin')}
+      ${kpiCard('DVKH (Tổng đài) xác minh', channelCount['Tổng đài'].toLocaleString('vi-VN'), pc(channelCount['Tổng đài'], filteredEvents.length) + ' tổng tin')}
+      ${kpiCard('Không xác minh', channelCount[''].toLocaleString('vi-VN'), pc(channelCount[''], filteredEvents.length) + ' tổng tin', false, 'hero amber')}
+      ${kpiCard('Tổng tin', filteredEvents.length.toLocaleString('vi-VN'), 'theo bộ lọc ngày / khung giờ đang chọn')}
+    `;
+
+    const alerts = [];
+    if (stats.cc > 0) alerts.push({ text: `Có ${stats.cc} tin cháy thật`, href: null });
+    if (stats.fs3n > 0) alerts.push({ text: `${stats.fs3n} cơ sở có >${TH.c3} tin xác minh chậm`, href: '#cb-slow' });
+    if (stats.fu3n > 0) alerts.push({ text: `${stats.fu3n} cơ sở có >${TH.u3} tin không xác minh`, href: '#cb-kxm' });
+    if (stats.f10 > 0) alerts.push({ text: `${stats.f10} cơ sở có >${TH.f10} tin`, href: '#cb-many' });
+
+    const bannerHtml = alerts.length
+      ? `<div class="alert-banner"><b>Cần chú ý</b>${alerts.map(a => a.href ? `<a href="${a.href}">${a.text}</a>` : `<span>${a.text}</span>`).join('')}</div>`
+      : `<div class="alert-banner ok"><b>Không có cảnh báo nào trong ngày</b></div>`;
+
+    const hourFilterBanner = selectedHour !== ''
+      ? `<div class="alert-banner info"><b>Đang lọc theo khung giờ ${hl(selectedHour)}</b><button id="clearHourFilter" class="secondary" style="margin-left:10px;padding:2px 12px;font-size:12px;">Bỏ lọc</button></div>`
+      : '';
+
+    const hours = [...Array(24).keys()].map(i => (i + 6) % 24).map(h => ({ h, x: computeStats(dayEvents.filter(e => e.h === h)) }));
+    const hourRows = hours.map(({ h, x }) => {
+      const isActive = String(h) === selectedHour;
+      return `<tr class="clickable${x.n ? '' : ' muted'}${isActive ? ' active' : ''}" data-hour="${h}">
+        <td class="left">${hl(h)}</td>
+        <td>${x.n}</td><td>${x.kxm}</td><td>${x.dat}</td>
+        <td>${pc(x.dat, x.src)}<span class="bar" style="width:${x.src ? Math.round(x.dat / x.src * 50) : 0}px"></span></td>
+        <td>${x.m3}</td>
+        <td>${pc(x.m3, x.src)}<span class="bar" style="width:${x.src ? Math.round(x.m3 / x.src * 50) : 0}px"></span></td>
+      </tr>`;
+    }).join('');
+
+    const dayStats = computeStats(dayEvents);
+    const hourTotalRow = `<tr class="total">
+      <td class="left">Cả ngày</td>
+      <td>${dayStats.n}</td><td>${dayStats.kxm}</td><td>${dayStats.dat}</td>
+      <td>${pc(dayStats.dat, dayStats.src)}</td>
+      <td>${dayStats.m3}</td><td>${pc(dayStats.m3, dayStats.src)}</td>
+    </tr>`;
+
+    let hourDetailHtml = '';
+    if (selectedHour !== '') {
+      const staffMap = {};
+      dayEvents.forEach(e => { (staffMap[e.z] = staffMap[e.z] || []).push(e); });
+      const staffStats = Object.keys(staffMap)
+        .map(n => ({ n, lab: shiftOverrides[n] || inferShift(staffMap[n]), x: computeStats(staffMap[n]) }))
+        .sort((a, b) => b.x.n - a.x.n || a.n.localeCompare(b.n));
+      const hourTotal = computeStats(filteredEvents);
+
+      hourDetailHtml = `<div class="card" id="hourDetail">
+        <b>SLA từng nhân sự — khung giờ ${hl(selectedHour)} (${staffStats.length} nhân sự, ${hourTotal.n} tin)</b>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Nhân viên</th><th>Ca thực tế</th><th>Tổng tin</th><th>Không xác minh</th>
+              <th>Đạt SLA ≤90s</th><th>% ≤90s</th><th>Đạt SLA ≤180s</th><th>% ≤180s</th>
+            </tr></thead>
+            <tbody>
+              ${staffStats.map(({ n, lab, x }) => `<tr>
+                <td class="left">${esc(n || '(không rõ)')}</td>
+                <td class="left">${CT[lab] || lab}</td>
+                <td>${x.n}</td><td>${x.kxm}</td>
+                <td>${x.dat}</td><td>${pc(x.dat, x.src)}</td>
+                <td>${x.m3}</td><td>${pc(x.m3, x.src)}</td>
+              </tr>`).join('') || '<tr><td colspan="8" class="text-muted">Không có tin trong khung giờ này</td></tr>'}
+              <tr class="total">
+                <td class="left">Tổng khung giờ</td><td></td>
+                <td>${hourTotal.n}</td><td>${hourTotal.kxm}</td>
+                <td>${hourTotal.dat}</td><td>${pc(hourTotal.dat, hourTotal.src)}</td>
+                <td>${hourTotal.m3}</td><td>${pc(hourTotal.m3, hourTotal.src)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="text-muted" style="margin-top:8px;">Tính theo nhân viên đã chọn ở ô "Tính hiệu suất theo" cho các tin nhận trong khung giờ này; % tính trên tổng tin nguồn của từng nhân sự trong giờ đó. Bảng nhân sự đủ ca nằm ở mục 3.</div>
+      </div>`;
+    }
+
+    const shiftRows = [
+      ['Ca 1 (06:00–14:00)', 'Ca 1'],
+      ['Ca 2 (14:00–22:00)', 'Ca 2'],
+      ['Ca 3 (22:00–06:00 hôm sau)', 'Ca 3']
+    ].map(([label, key]) => {
+      const x = computeStats(filteredEvents.filter(e => e.ca === key));
+      return `<tr>
+        <td class="left">${label}</td>
+        <td>${x.n}</td><td>${x.cc}</td><td>${x.kxm}</td>
+        <td>${pc(x.kxm, x.n)}</td>${msCells(x)}
+      </tr>`;
+    }).join('');
+
+    const staffMap = {}, dayStaffMap = {};
+    filteredEvents.forEach(e => { (staffMap[e.z] = staffMap[e.z] || []).push(e); });
+    dayEvents.forEach(e => { (dayStaffMap[e.z] = dayStaffMap[e.z] || []).push(e); });
+
+    const staffRows = Object.keys(staffMap).map(n => {
+      const lab = shiftOverrides[n] || inferShift(dayStaffMap[n]);
+      const x = computeStats(staffMap[n].filter(e => inShift(lab, e)));
+      return { n, lab, x, allCount: (dayStaffMap[n] || []).length };
+    }).filter(r => r.lab !== 'Không tính' || r.allCount > 0)
+      .sort((a, b) => b.x.n - a.x.n);
+
+    const searchStaff = $('filterStaff').value.toLowerCase();
+    const validStaff = staffRows.filter(r => r.lab !== 'Không tính');
+    const staffTotals = validStaff.reduce((acc, r) => ({
+      n: acc.n + r.x.n, cc: acc.cc + r.x.cc, kxm: acc.kxm + r.x.kxm,
+      dat: acc.dat + r.x.dat, ms: acc.ms.map((v, i) => v + r.x.ms[i])
+    }), { n: 0, cc: 0, kxm: 0, dat: 0, ms: TH.ms.map(() => 0) });
+
+    const staffTableRows = staffRows
+      .filter(r => !searchStaff || r.n.toLowerCase().includes(searchStaff))
+      .map(r => `<tr class="clickable" data-staff="${esc(r.n)}">
+        <td>${esc(r.n)}${r.allCount < TH.few ? ' <span class="text-muted">(ít dữ liệu)</span>' : ''}</td>
+        <td class="left">
+          <select data-staff-select="${esc(r.n)}">
+            ${Object.keys(CASES).map(c => `<option value="${c}"${c === r.lab ? ' selected' : ''}>${CT[c] || c}</option>`).join('')}
+          </select>
+        </td>
+        <td>${r.x.n}</td><td>${r.x.cc}</td><td>${r.x.kxm}</td>
+        <td>${pc(r.x.kxm, r.x.n)}</td>${msCells(r.x)}
+      </tr>`).join('');
+
+    const totalRow = `<tr class="total">
+      <td>TỔNG ĐÚNG CA (${validStaff.length} NV)</td><td></td>
+      <td>${staffTotals.n}</td><td>${staffTotals.cc}</td><td>${staffTotals.kxm}</td>
+      <td>${pc(staffTotals.kxm, staffTotals.n)}</td>${msCells(staffTotals)}
+    </tr>`;
+
+    const otherStaff = staffRows.filter(r => r.lab === 'Không tính').map(r => r.n);
+    const outOfShift = filteredEvents.length - staffTotals.n;
+
+    const slaMilestoneRows = SHOW.map(i => `<tr>
+      <td>Mốc ${i + 1}</td><td>≤ ${TH.ms[i]}s</td>
+      <td>${stats.ms[i]}</td>
+      <td>${pc(stats.ms[i], stats.src)}</td>
+      <td>${pc(stats.ms[i], stats.ok)}</td>
+      ${prevStats ? `<td>${pc(prevStats.ms[i], prevStats.src)}</td>` : ''}
+    </tr>`).join('');
+
+    const lastIdx = SHOW[SHOW.length - 1];
+    const overCount = stats.ok - stats.ms[lastIdx];
+
+    const slowFacilitiesHtml = stats.fs.map(f => `<tr>
+      <td class="left">${esc(f.n)}</td><td class="wrap">${esc(f.tb || '–')}</td>
+      <td><span class="pill red">${f.s}</span></td><td>${f.c}</td><td>${f.mx}</td>
+      <td class="wrap">${esc(f.ma)}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="text-muted">Không có cơ sở nào vượt ngưỡng</td></tr>';
+
+    const manyFacilitiesHtml = stats.fl.map(f => `<tr>
+      <td class="left">${esc(f.n)}</td><td class="wrap">${esc(f.tb || '–')}</td>
+      <td>${f.c}</td><td>${f.u}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="text-muted">Không có cơ sở nào vượt ngưỡng</td></tr>';
+
+    const unvFacilitiesHtml = stats.fx.map(f => `<tr>
+      <td class="left">${esc(f.n)}</td><td class="wrap">${esc(f.tb || '–')}</td>
+      <td>${f.u}</td><td>${f.c}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="text-muted">Không có cơ sở nào vượt ngưỡng</td></tr>';
+
+    $('mainDashboard').innerHTML = `
+      ${hourFilterBanner}
+      ${bannerHtml}
+
+      <details class="collapse"${lookupOpen ? ' open' : ''}>
+        <summary>Số tin theo kênh xác minh (bấm để xem)</summary>
+        <div class="kpi-grid">${channelKpiHtml}</div>
+        <div class="text-muted" style="margin-top:8px;">Kênh xác minh theo quy tắc TGXL: App = có "đã xác minh là…" và có "Đã hoàn thành tiếp nhận xử lý tin"; Xét tuần tự: Tầng 1 App = có "đã xác minh là…"; chỉ khi App không có xác minh mới xét Tầng 2 DVKH = TTDVKH có kết luận Có cháy / Không có cháy. Cả hai tầng đều cần "Đã hoàn thành tiếp nhận xử lý tin" (lần sớm nhất); không thỏa thì là Không xác minh.</div>
+      </details>
+
+      <div class="kpi-grid">
+        ${kpiCard('Tổng tin', stats.n.toLocaleString('vi-VN'), stats.fac + ' cơ sở')}
+        ${kpiCard('Có cháy thật (đã khử trùng)', stats.cc, pc(stats.cc, stats.n) + ' tổng tin', stats.cc > 0, stats.cc > 0 ? 'hero' : 'hero safe')}
+        ${kpiCard('Không xác minh', stats.kxm, pc(stats.kxm, stats.n) + ' | ' + stats.fu + ' cơ sở', false, 'hero amber')}
+        ${kpiCard('Đạt SLA ≤90 giây', pc(stats.dat, stats.src), stats.dat.toLocaleString('vi-VN') + ' / ' + stats.src.toLocaleString('vi-VN') + ' tin nguồn', false, 'sla hero pct')}
+        ${kpiCard('Đạt SLA ≤180 giây', pc(stats.m3, stats.src), stats.m3.toLocaleString('vi-VN') + ' / ' + stats.src.toLocaleString('vi-VN') + ' tin nguồn', false, 'sla hero pct')}
+      </div>
+
+      <div class="kpi-grid">
+        ${kpiCard('Cơ sở >' + TH.f10 + ' tin', stats.f10, 'cơ sở phát sinh nhiều tin', stats.f10 > 0, 'hero')}
+        ${kpiCard('Cơ sở có >' + TH.u3 + ' tin không xác minh', stats.fu3n, 'cơ sở cần rà soát', stats.fu3n > 0, 'hero')}
+        ${kpiCard('Cơ sở có >' + TH.c3 + ' tin xác minh chậm', stats.fs3n, 'cơ sở cần rà soát · ' + stats.cham + ' tin chậm toàn ngày', stats.fs3n > 0, 'hero')}
+      </div>
+
+      <div class="card-header">SLA theo các mốc thời gian</div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Mốc</th><th>Ngưỡng</th><th>Số tin đạt</th>
+              <th>% tổng tin nguồn</th><th>% tin đã có thời gian xác minh</th>
+              ${prevStats ? '<th>% tổng tin nguồn ngày trước</th>' : ''}
+            </tr></thead>
+            <tbody>
+              ${slaMilestoneRows}
+              <tr>
+                <td colspan="2">Quá ${TH.ms[lastIdx]}s</td>
+                <td>${overCount}</td><td>${pc(overCount, stats.src)}</td><td>${pc(overCount, stats.ok)}</td>
+                ${prevStats ? `<td>${pc(prevStats.ok - prevStats.ms[lastIdx], prevStats.src)}</td>` : ''}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="text-muted" style="margin-top:8px;">Thời gian xử lý = mốc nhân viên bấm "Đã hoàn thành tiếp nhận xử lý tin" − thời gian nhận tin, áp dụng cho tin xác minh qua App hoặc qua Tổng đài TTDVKH; tin không đủ điều kiện được xếp vào "Không xác minh". "Tổng tin nguồn" gồm cả tin không xác minh và tin thiếu thời gian, giống chỉ số SLA ≤90s của báo cáo.</div>
+      </div>
+
+      <div class="card-header">SLA theo khung giờ (mỗi giờ một dòng, từ 06:00 đến 06:00 hôm sau)</div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Khung giờ</th><th>Tổng tin</th><th>Không xác minh</th>
+              <th>Đạt SLA ≤90s</th><th>% ≤90s</th><th>Đạt SLA ≤180s</th><th>% ≤180s</th>
+            </tr></thead>
+            <tbody>${hourRows}${hourTotalRow}</tbody>
+          </table>
+        </div>
+        <div class="text-muted" style="margin-top:8px;">Mỗi dòng là một giờ theo thời điểm nhận tin của cả ngày; % tính trên tổng tin nguồn của giờ đó. Bấm vào một dòng để xem SLA từng nhân sự trong giờ đó và lọc toàn bộ báo cáo theo khung giờ này; bấm lại, bấm "Bỏ lọc" hoặc chọn "Cả ngày" để bỏ lọc.</div>
+      </div>
+
+      ${hourDetailHtml}
+
+      <div class="card-header">1. So sánh ngày hiện tại với ngày liền trước ${prevDayStr ? '(' + fdt(prevDayStr) + ')' : ''}</div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Chỉ tiêu</th>
+              <th>${prevDayStr ? fdt(prevDayStr) : 'Ngày trước'}</th>
+              <th>${fdt(selectedDay)}</th>
+              <th>Chênh lệch</th>
+              <th>Nhận định</th>
+            </tr></thead>
+            <tbody>${compareHtml}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card-header">2. Hiệu suất theo ca</div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Ca</th><th>Tổng tin</th><th>Có cháy thật</th><th>Không XMV</th><th>Tỷ lệ KXM</th>${msHeaders()}
+            </tr></thead>
+            <tbody>${shiftRows}</tbody>
+          </table>
+        </div>
+        <div class="text-muted" style="margin-top:8px;">Ca 3 chạy liền từ 22:00 đến 06:00 ngày hôm sau và tính trọn vào ngày bắt đầu ca: tin nhận lúc 00:00–06:00 được tính vào ngày hôm trước.</div>
+      </div>
+
+      <div class="card-header">3. Hiệu suất nhân viên theo ca thực tế</div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Nhân viên</th><th>Ca thực tế</th><th>Tổng tin</th><th>Có cháy thật</th>
+              <th>Không XMV</th><th>Tỷ lệ KXM</th>${msHeaders()}
+            </tr></thead>
+            <tbody>${staffTableRows}${totalRow}</tbody>
+          </table>
+        </div>
+        <div class="text-muted" style="margin-top:8px;">Đối soát: ${staffTotals.n.toLocaleString('vi-VN')}/${filteredEvents.length.toLocaleString('vi-VN')} tin thuộc đúng ca; ${outOfShift} tin còn lại là bàn giao, xử lý ngoài ca hoặc tài khoản test${otherStaff.length ? ' (' + esc(otherStaff.join(', ')) + ')' : ''}. Ca thực tế được suy từ dữ liệu (ca có nhiều tin nhất của nhân viên). Ca 1: 06:00–14:00, Ca 2: 14:00–22:00, Ca 3: 22:00–06:00 ngày hôm sau (tính vào ngày bắt đầu ca), HC: 08:00–17:00; bạn có thể đổi bằng danh sách chọn. Bấm vào một dòng để xem tin.</div>
+      </div>
+      <div id="staffDetail"></div>
+
+      <div class="card-header">4. Cảnh báo cơ sở</div>
+      <div class="card" id="cb-slow">
+        <b>Cơ sở có trên ${TH.c3} tin xác minh chậm (trên ${TH.sla}s) — ${stats.fs3n} cơ sở</b>
+        <div class="table-wrap" style="max-height:380px;overflow:auto;margin-top:10px;">
+          <table><thead><tr>
+            <th>Cơ sở</th><th>Serial number</th><th>Tin xác minh chậm</th>
+            <th>Tổng tin</th><th>Chậm nhất (s)</th><th>Mã tin xác minh chậm</th>
+          </tr></thead><tbody>${slowFacilitiesHtml}</tbody></table>
+        </div>
+      </div>
+
+      <div class="card" id="cb-many">
+        <b>Cơ sở có trên ${TH.f10} tin trong ngày (${stats.f10} cơ sở)</b>
+        <div class="table-wrap" style="max-height:380px;overflow:auto;margin-top:10px;">
+          <table><thead><tr>
+            <th>Cơ sở</th><th>Serial number</th><th>Tổng tin</th><th>Tin không xác minh</th>
+          </tr></thead><tbody>${manyFacilitiesHtml}</tbody></table>
+        </div>
+      </div>
+
+      <div class="card" id="cb-kxm">
+        <b>Cơ sở có trên ${TH.u3} tin không xác minh (${stats.fu3n} cơ sở)</b>
+        <div class="table-wrap" style="max-height:380px;overflow:auto;margin-top:10px;">
+          <table><thead><tr>
+            <th>Cơ sở</th><th>Serial number</th><th>Tin không xác minh</th><th>Tổng tin</th>
+          </tr></thead><tbody>${unvFacilitiesHtml}</tbody></table>
+        </div>
+      </div>
+    `;
+
+    document.querySelectorAll('tr[data-hour]').forEach(tr => {
+      tr.onclick = () => {
+        const hour = tr.dataset.hour;
+        $('filterHour').value = $('filterHour').value === hour ? '' : hour;
+        render();
+        const detail = $('hourDetail');
+        if (detail) detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      };
+    });
+
+    const clearHourBtn = $('clearHourFilter');
+    if (clearHourBtn) clearHourBtn.onclick = () => { $('filterHour').value = ''; render(); };
+
+    document.querySelectorAll('select[data-staff-select]').forEach(sel => {
+      sel.onclick = e => e.stopPropagation();
+      sel.onchange = () => { shiftOverrides[sel.dataset.staffSelect] = sel.value; render(); };
+    });
+
+    document.querySelectorAll('tr[data-staff]').forEach(tr => {
+      tr.onclick = () => {
+        const staffName = tr.dataset.staff;
+        const shiftLab = shiftOverrides[staffName] || inferShift(dayStaffMap[staffName] || []);
+        const staffEvents = (staffMap[staffName] || []).filter(e => inShift(shiftLab, e));
+        $('staffDetail').innerHTML = `<div class="card">
+          <b>Tin của ${esc(staffName)}</b> — ca ${shiftLab} (${staffEvents.length})
+          <div class="table-wrap" style="margin-top:10px;">
+            <table><thead><tr>
+              <th>Mã tin</th><th>Cơ sở</th><th>Nhận tin</th><th>Ca</th>
+              <th>Kết quả</th><th>Thời gian (s)</th><th>SLA</th>
+            </tr></thead>
+            <tbody>${staffEvents.slice(0, 400).map(e => `<tr>
+              <td class="left">${e.ma}</td><td class="left">${esc(e.cs)}</td>
+              <td>${e.tg}</td><td>${e.ca}</td><td>${e.kq}</td>
+              <td>${e.u == null ? '–' : e.u}</td><td>${e.sla}</td>
+            </tr>`).join('')}</tbody></table>
+          </div>
+        </div>`;
+        $('staffDetail').scrollIntoView({ block: 'nearest' });
+      };
+    });
+
+    const details = document.querySelector('details.collapse');
+    if (details) details.ontoggle = () => { lookupOpen = details.open; };
+
+    updateLookup();
+  }
+
+  function updateLookup() {
+    const q = $('filterCode').value.trim();
+    const card = $('lookupResultCard');
+    if (!q) { card.classList.add('hidden'); card.innerHTML = ''; return; }
+    const results = allEvents.filter(e => e.ma.includes(q)).slice(0, 8);
+    card.classList.remove('hidden');
+    card.innerHTML = results.length
+      ? `<div class="table-wrap"><table><thead><tr>
+          <th>Mã tin</th><th>Cơ sở</th><th>Nhận tin</th><th>Tiếp nhận</th>
+          <th>Tính cho</th><th>Ca</th><th>Kênh xác minh</th>
+          <th>Kết quả</th><th>Thời gian (s)</th><th>SLA</th>
+        </tr></thead><tbody>${results.map(e => `<tr>
+          <td class="left">${e.ma}</td><td class="left">${esc(e.cs)}</td>
+          <td>${e.tg}</td><td class="left">${esc(e.nv)}</td>
+          <td class="left"><b>${esc(e.z)}</b></td><td>${e.ca}</td>
+          <td>${e.kenh || '–'}</td><td>${e.kq}</td>
+          <td>${e.u == null ? '–' : e.u}</td><td>${e.sla}</td>
+        </tr>`).join('')}</tbody></table></div>`
+      : '<div class="text-muted" style="padding:12px;">Không tìm thấy mã tin.</div>';
+  }
+
+  async function loadFiles(files) {
+    $('uploadError').innerHTML = '';
+    try {
+      const map = {};
+      allEvents.forEach(e => map[e.ma] = e);
+      for (const f of files) {
+        const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+        buildRows(aoa).forEach(e => map[e.ma] = e);
+      }
+      allEvents = Object.values(map);
+      $('fireIds').value = suggestFireIds(allEvents).join(', ');
+      const days = [...new Set(allEvents.map(e => e.ng).filter(Boolean))].sort();
+      if (!days.length) throw 'Không đọc được ngày từ cột "Thời gian nhận tin".';
+      $('filterDay').innerHTML = days.map(d => `<option value="${d}">${fdt(d)}</option>`).join('');
+      $('filterDay').value = days[days.length - 1];
+      $('fileNameInfo').textContent = allEvents.length.toLocaleString('vi-VN') + ' tin, ' + days.length + ' ngày';
+      $('uploadSection').classList.add('hidden');
+      $('appSection').classList.remove('hidden');
+      render();
+      if ($('tab2').classList.contains('active')) renderWeekTab();
+      if ($('tab3').classList.contains('active')) renderMonthTab();
+    } catch (err) {
+      $('uploadError').innerHTML = '<div class="err">' + err + '</div>';
+    }
+  }
+
+  /* ============================================================
+     TAB 2 — WEEKLY DASHBOARD
+     ============================================================ */
+  let chartWeekDays;
+
+  function renderWeekTab() {
+    if (!allEvents.length) {
+      $('weekSummary').innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;">Chưa có dữ liệu — hãy nạp file Excel ở Tab 1.</div>';
+      $('weekTableBody').innerHTML = '<tr><td colspan="3" class="text-muted" style="text-align:center;">Chưa có dữ liệu</td></tr>';
+      return;
+    }
+
+    const availableDays = [...new Set(allEvents.map(e => e.ng).filter(Boolean))].sort();
+    const refDay = $('filterDay').value || availableDays[availableDays.length - 1];
+    const baseDate = new Date(refDay);
+    const dayOfWeek = baseDate.getDay();
+    const monday = new Date(baseDate);
+    monday.setDate(baseDate.getDate() - ((dayOfWeek + 6) % 7));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const mondayStr = monday.toISOString().slice(0, 10);
+    const sundayStr = sunday.toISOString().slice(0, 10);
+
+    const weekData = allEvents.filter(e => e.ng >= mondayStr && e.ng <= sundayStr);
+    const prevMonday = new Date(monday); prevMonday.setDate(monday.getDate() - 7);
+    const prevSunday = new Date(sunday); prevSunday.setDate(sunday.getDate() - 7);
+    const prevMondayStr = prevMonday.toISOString().slice(0, 10);
+    const prevSundayStr = prevSunday.toISOString().slice(0, 10);
+    const prevWeekData = allEvents.filter(e => e.ng >= prevMondayStr && e.ng <= prevSundayStr);
+
+    const fireIdSet = new Set(
+      ($('fireIds').value.match(/0__\d+|\d{5,}/g) || []).map(x => /^0__/.test(x) ? x : '0__' + x)
+    );
+    deriveResults(allEvents, fireIdSet);
+
+    const total = weekData.length;
+    const prevTotal = prevWeekData.length;
+    const sla90Week = weekData.filter(e => e.sla === 'Đạt').length;
+    const sla90Rate = total ? (sla90Week / total * 100).toFixed(1) : 0;
+    const prevSla90Week = prevWeekData.filter(e => e.sla === 'Đạt').length;
+    const prevSla90Rate = prevTotal ? (prevSla90Week / prevTotal * 100).toFixed(1) : 0;
+
+    $('weekSummary').innerHTML = `
+      <div class="kpi-card"><span class="kpi-label">Tuần hiện tại</span><b class="kpi-value">${total} tin</b></div>
+      <div class="kpi-card"><span class="kpi-label">Tuần trước (pw)</span><b class="kpi-value">${prevTotal} tin</b></div>
+      <div class="kpi-card sla"><span class="kpi-label">SLA ≤90s tuần này</span><b class="kpi-value">${sla90Rate}%</b></div>
+      <div class="kpi-card"><span class="kpi-label">SLA ≤90s tuần trước</span><b class="kpi-value text-muted">${prevSla90Rate}%</b></div>
+    `;
+
+    const days = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+    const dayCounts = Array(7).fill(0);
+    const daySla = Array(7).fill(0);
+    weekData.forEach(r => {
+      const d = new Date(r.ng).getDay();
+      const idx = (d + 6) % 7;
+      dayCounts[idx]++;
+      if (r.sla === 'Đạt') daySla[idx]++;
+    });
+
+    $('weekTableBody').innerHTML = days.map((day, i) => {
+      const sla = dayCounts[i] ? (daySla[i] / dayCounts[i] * 100).toFixed(1) : 0;
+      return `<tr><td class="left">${day}</td><td>${dayCounts[i]}</td><td>${sla}%</td></tr>`;
+    }).join('');
+
+    if (chartWeekDays) chartWeekDays.destroy();
+    chartWeekDays = new Chart(document.getElementById('chartWeekDays'), {
+      type: 'bar',
+      data: { labels: days, datasets: [{ label: 'Số tin', data: dayCounts, backgroundColor: '#40528f', borderRadius: 6 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+  }
+
+  /* ============================================================
+     TAB 3 — MONTHLY DASHBOARD
+     ============================================================ */
+  let chartMonthTrend, chartTopSites;
+
+  function renderMonthTab() {
+    if (!allEvents.length) {
+      $('monthSummary').innerHTML = '<div class="text-muted" style="padding:20px;text-align:center;">Chưa có dữ liệu — hãy nạp file Excel ở Tab 1.</div>';
+      return;
+    }
+
+    const availableDays = [...new Set(allEvents.map(e => e.ng).filter(Boolean))].sort();
+    const refDay = $('filterDay').value || availableDays[availableDays.length - 1];
+    const refDate = new Date(refDay);
+    const month = refDate.getMonth();
+    const year = refDate.getFullYear();
+    const monthData = allEvents.filter(e => {
+      const d = new Date(e.ng);
+      return d.getMonth() === month && d.getFullYear() === year;
+    });
+
+    const fireIdSet = new Set(
+      ($('fireIds').value.match(/0__\d+|\d{5,}/g) || []).map(x => /^0__/.test(x) ? x : '0__' + x)
+    );
+    deriveResults(allEvents, fireIdSet);
+
+    const total = monthData.length;
+    const fireCount = monthData.filter(e => e.kq === 'Có cháy').length;
+    const sla90Count = monthData.filter(e => e.sla === 'Đạt').length;
+    const sla90Rate = total ? (sla90Count / total * 100).toFixed(1) : 0;
+
+    const siteMap = {};
+    monthData.forEach(e => { if (e.cs) siteMap[e.cs] = (siteMap[e.cs] || 0) + 1; });
+    const topSites = Object.entries(siteMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    const weekLabels = ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
+    const weekSla = Array(5).fill(0);
+    const weekTotal = Array(5).fill(0);
+    monthData.forEach(e => {
+      const d = new Date(e.ng);
+      const weekIdx = Math.min(Math.floor((d.getDate() - 1) / 7), 4);
+      weekTotal[weekIdx]++;
+      if (e.sla === 'Đạt') weekSla[weekIdx]++;
+    });
+    const weekRates = weekSla.map((s, i) => weekTotal[i] ? (s / weekTotal[i] * 100) : 0);
+
+    $('monthSummary').innerHTML = `
+      <div class="kpi-card"><span class="kpi-label">Tổng tin tháng</span><b class="kpi-value">${total}</b></div>
+      <div class="kpi-card warn"><span class="kpi-label">Sự cố cháy</span><b class="kpi-value">${fireCount}</b></div>
+      <div class="kpi-card sla"><span class="kpi-label">SLA ≤90s tổng thể</span><b class="kpi-value">${sla90Rate}%</b></div>
+      <div class="kpi-card"><span class="kpi-label">Cơ sở nhiều sự cố</span><b class="kpi-value" style="font-size:16px;">${topSites.length ? topSites[0][0] + ' (' + topSites[0][1] + ')' : '—'}</b></div>
+    `;
+
+    if (chartMonthTrend) chartMonthTrend.destroy();
+    chartMonthTrend = new Chart(document.getElementById('chartMonthTrend'), {
+      type: 'line',
+      data: { labels: weekLabels, datasets: [{ label: 'SLA ≤90s (%)', data: weekRates, borderColor: '#40528f', backgroundColor: 'rgba(64,82,143,0.1)', tension: 0.3, fill: true }] },
+      options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+
+    if (chartTopSites) chartTopSites.destroy();
+    chartTopSites = new Chart(document.getElementById('chartTopSites'), {
+      type: 'bar',
+      data: { labels: topSites.map(s => s[0]), datasets: [{ label: 'Số sự cố', data: topSites.map(s => s[1]), backgroundColor: '#f97316', borderRadius: 6 }] },
+      options: { responsive: true, indexAxis: 'y', plugins: { legend: { display: false } } }
+    });
+  }
+
+  /* ============================================================
+     TAB 4 — CHECKLIST + SUPABASE (cột Day, Task, Status, Note)
+     ============================================================ */
+  const DEFAULT_TASKS = [
+    'Kiểm tra trạng thái đường truyền Gsafe',
+    'Kiểm tra tin tồn đọng',
+    'Bàn giao ca trực',
+    'Xử lý các cơ sở cảnh báo đỏ',
+    'Kiểm tra hệ thống camera & cảm biến',
+    'Ghi nhận sự cố phát sinh'
+  ];
+
+  let tab4Inited = false;
+  let currentRows = [];
+  let pendingTimers = {};
+  let loadingTab4 = false;
+
+  const clTbody = $('clTableBody');
+  const clMonthFilter = $('clMonthFilter');
+  const clDayFilter = $('clDayFilter');
+  const clStatusInfo = $('clStatusInfo');
+  const clToast = $('clToast');
+
+  function clTodayStr() { return new Date().toISOString().slice(0, 10); }
+  function clThisMonthStr() { return new Date().toISOString().slice(0, 7); }
+
+  let clToastTimer = null;
+  function clShowToast(msg, type) {
+    clToast.textContent = msg;
+    clToast.className = 'cl-toast show' + (type ? ' ' + type : '');
+    clearTimeout(clToastTimer);
+    clToastTimer = setTimeout(() => { clToast.className = 'cl-toast'; }, 2400);
+  }
+  function clSetStatus(text) { clStatusInfo.textContent = text || ''; }
+
+  // Chuẩn hoá Day (timestamptz) → chuỗi 'YYYY-MM-DD' cho input date
+  function toDateOnly(val) {
+    if (!val) return '';
+    if (typeof val === 'string') return val.split('T')[0].slice(0, 10);
+    return '';
+  }
+  // Chuẩn hoá ngày người dùng nhập → timestamptz ISO
+  function toTimestamp(dateStr) {
+    if (!dateStr) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return new Date(dateStr + 'T00:00:00').toISOString();
+    return new Date(dateStr).toISOString();
+  }
+
+  // Cảnh báo RLS — khi gặp lỗi RLS, hiển thị hướng dẫn
+  function handleSupabaseError(err, action) {
+    const msg = String(err && err.message || err);
+    if (/row-level security/i.test(msg)) {
+      return '⚠️ Lỗi RLS (Row-Level Security): Bảng ' + TABLE + ' chưa cấp quyền INSERT/UPDATE/SELECT cho anon key. ' +
+             'Vào Supabase → Table Editor → ' + TABLE + ' → RLS Policies → thêm policy "Enable access for all" (hoặc policy riêng) ' +
+             'cho các thao tác SELECT, INSERT, UPDATE, DELETE với role "anon".';
+    }
+    return 'Lỗi ' + action + ': ' + msg;
+  }
+
+  function initTab4() {
+    if (tab4Inited) return;
+    tab4Inited = true;
+
+    clMonthFilter.value = clThisMonthStr();
+    clDayFilter.value = '';
+
+    if (!_supabase) {
+      clTbody.innerHTML = `<tr><td colspan="5" class="cl-empty" style="color:var(--red,#b4473f);">
+        ⚠️ Không thể khởi tạo Supabase client. Kiểm tra lại cấu hình.
+      </td></tr>`;
+      clSetStatus('Lỗi cấu hình');
+      return;
+    }
+
+    $('clBtnAddRow').addEventListener('click', clAddRow);
+    $('clBtnRepeat').addEventListener('click', clRepeatTasks);
+    $('clBtnRefresh').addEventListener('click', clFetchRows);
+    $('clBtnClearDay').addEventListener('click', () => {
+      clDayFilter.value = '';
+      clFetchRows();
+    });
+    clMonthFilter.addEventListener('change', () => {
+      clDayFilter.value = '';
+      clFetchRows();
+    });
+    clDayFilter.addEventListener('change', () => {
+      if (clDayFilter.value) clMonthFilter.value = clDayFilter.value.slice(0, 7);
+      clFetchRows();
+    });
+
+    clFetchRows();
+  }
+
+  async function clFetchRows() {
+    if (!_supabase || loadingTab4) return;
+    loadingTab4 = true;
+    clSetStatus('Đang tải...');
+
+    try {
+      const month = clMonthFilter.value || clThisMonthStr();
+      const day = clDayFilter.value || '';
+
+      const [y, m] = month.split('-').map(Number);
+      const firstDayDate = new Date(y, m - 1, 1);
+      const lastDayDate = new Date(y, m, 0);
+      const rangeStart = new Date(firstDayDate.getTime() - 86400000).toISOString();
+      const rangeEnd = new Date(lastDayDate.getTime() + 86400000).toISOString();
+
+      let query = _supabase
+        .from(TABLE)
+        .select('*')
+        .gte('Day', rangeStart)
+        .lte('Day', rangeEnd)
+        .order('Day', { ascending: false })
+        .order('id', { ascending: true });
+
+      if (day) {
+        const dayStart = new Date(day + 'T00:00:00').toISOString();
+        const dayEnd = new Date(day + 'T23:59:59').toISOString();
+        query = query.gte('Day', dayStart).lte('Day', dayEnd);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      let rows = data || [];
+      if (day) {
+        rows = rows.filter(r => toDateOnly(r.Day) === day);
+      } else {
+        rows = rows.filter(r => toDateOnly(r.Day).startsWith(month));
+      }
+
+      currentRows = rows;
+      clRenderTable();
+      clRenderStats();
+      clSetStatus(`Hiển thị ${currentRows.length} task`);
+    } catch (err) {
+      console.error('[Tab4] fetch error:', err);
+      const msg = handleSupabaseError(err, 'tải dữ liệu');
+      clTbody.innerHTML = `<tr><td colspan="5" class="cl-empty" style="color:var(--red,#b4473f);">
+        ❌ ${esc(msg)}
+      </td></tr>`;
+      clSetStatus('Lỗi tải dữ liệu');
+    } finally {
+      loadingTab4 = false;
+    }
+  }
+
+  function clRenderTable() {
+    if (!currentRows.length) {
+      clTbody.innerHTML = `<tr><td colspan="5" class="cl-empty">
+        Chưa có task nào cho tháng này. Bấm <b>+ Thêm task mới</b> hoặc <b>🔄 Tạo danh sách mẫu hằng ngày</b> để bắt đầu.
+      </td></tr>`;
+      return;
+    }
+
+    clTbody.innerHTML = currentRows.map(row => {
+      const done = !!row.Status;
+      const dayStr = toDateOnly(row.Day);
+      return `<tr data-id="${row.id}" class="${done ? 'completed' : ''}">
+        <td>
+          <input type="date" class="cl-date-input" data-field="Day"
+                 value="${esc(dayStr)}">
+        </td>
+        <td>
+          <input type="text" data-field="Task" value="${esc(row.Task || '')}"
+                 placeholder="Nội dung công việc...">
+        </td>
+        <td style="text-align:center;">
+          <input type="checkbox" data-field="Status" ${done ? 'checked' : ''}>
+          <div style="margin-top:4px;">
+            <span class="cl-badge ${done ? 'done' : 'pending'}">${done ? 'Xong' : 'Chờ'}</span>
+          </div>
+        </td>
+        <td>
+          <textarea data-field="Note" rows="1" placeholder="Ghi chú...">${esc(row.Note || '')}</textarea>
+        </td>
+        <td>
+          <button class="cl-row-delete" data-action="delete" title="Xoá task">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    clTbody.querySelectorAll('tr[data-id]').forEach(tr => {
+      const id = tr.dataset.id;
+
+      tr.querySelectorAll('input, textarea').forEach(el => {
+        const field = el.dataset.field;
+        const evt = el.type === 'checkbox' ? 'change' : 'input';
+        el.addEventListener(evt, () => clScheduleUpdate(id, field, el.value, el));
+
+        if (el.type === 'checkbox') {
+          el.addEventListener('change', () => {
+            const done = el.checked;
+            tr.classList.toggle('completed', done);
+            const badge = tr.querySelector('.cl-badge');
+            if (badge) {
+              badge.className = 'cl-badge ' + (done ? 'done' : 'pending');
+              badge.textContent = done ? 'Xong' : 'Chờ';
+            }
+          });
+        }
+      });
+
+      const delBtn = tr.querySelector('[data-action="delete"]');
+      if (delBtn) delBtn.addEventListener('click', () => clDeleteRow(id));
+    });
+  }
+
+  function clScheduleUpdate(id, field, value, el) {
+    const key = `${id}:${field}`;
+    clearTimeout(pendingTimers[key]);
+    pendingTimers[key] = setTimeout(() => {
+      clUpdateRow(id, field, value, el);
+      delete pendingTimers[key];
+    }, 600);
+  }
+
+  async function clUpdateRow(id, field, value, el) {
+    if (!_supabase) return;
+
+    let payload;
+    if (field === 'Status') {
+      payload = { Status: !!el.checked };
+    } else if (field === 'Day') {
+      payload = { Day: toTimestamp(value) };
+    } else {
+      payload = { [field]: value };
+    }
+
+    clSetStatus('Đang lưu...');
+    try {
+      const { error } = await _supabase.from(TABLE).update(payload).eq('id', id);
+      if (error) throw error;
+
+      const row = currentRows.find(r => String(r.id) === String(id));
+      if (row) Object.assign(row, payload);
+
+      if (field === 'Day') {
+        const month = clMonthFilter.value || clThisMonthStr();
+        if (!toDateOnly(payload.Day).startsWith(month)) clFetchRows();
+      }
+
+      clSetStatus('Đã lưu ✓');
+      setTimeout(() => clSetStatus(''), 1500);
+    } catch (err) {
+      console.error('[Tab4] update error:', err);
+      const msg = handleSupabaseError(err, 'lưu');
+      clShowToast(msg, 'error');
+      clSetStatus('Lỗi lưu');
+      if (field === 'Status') el.checked = !el.checked;
+    }
+  }
+
+  async function clAddRow() {
+    if (!_supabase) return;
+
+    let defaultDay = clDayFilter.value || clTodayStr();
+    const month = clMonthFilter.value || clThisMonthStr();
+    if (!defaultDay.startsWith(month)) defaultDay = `${month}-01`;
+
+    clSetStatus('Đang thêm...');
+    try {
+      // Không dùng .select() để tránh yêu cầu quyền SELECT sau INSERT
+      const { error } = await _supabase
+        .from(TABLE)
+        .insert([{
+          Day: toTimestamp(defaultDay),
+          Task: '',
+          Status: false,
+          Note: ''
+        }]);
+
+      if (error) throw error;
+
+      clShowToast('Đã thêm task mới', 'success');
+      await clFetchRows();
+    } catch (err) {
+      console.error('[Tab4] add error:', err);
+      const msg = handleSupabaseError(err, 'thêm');
+      clShowToast(msg, 'error');
+      clSetStatus('Lỗi thêm');
+    }
+  }
+
+  /* TẠO DANH SÁCH MẪU HẰNG NGÀY */
+  async function clRepeatTasks() {
+    if (!_supabase) return;
+
+    const targetDay = clDayFilter.value || clTodayStr();
+    const dayStart = new Date(targetDay + 'T00:00:00').toISOString();
+    const dayEnd = new Date(targetDay + 'T23:59:59').toISOString();
+
+    clSetStatus('Đang kiểm tra...');
+    try {
+      const { data: existing, error: checkErr } = await _supabase
+        .from(TABLE)
+        .select('id')
+        .gte('Day', dayStart)
+        .lte('Day', dayEnd)
+        .limit(1);
+      if (checkErr) throw checkErr;
+
+      if (existing && existing.length > 0) {
+        if (!confirm(`Ngày ${fdt(targetDay)} đã có task. Bạn có muốn thêm bộ task mẫu vào ngày này không?`)) {
+          clSetStatus('');
+          return;
+        }
+      }
+
+      const dayTs = toTimestamp(targetDay);
+      const payload = DEFAULT_TASKS.map(task => ({
+        Day: dayTs,
+        Task: task,
+        Status: false,
+        Note: ''
+      }));
+
+      clSetStatus('Đang tạo danh sách mẫu...');
+      // Không dùng .select() để tránh yêu cầu quyền SELECT sau INSERT
+      const { error } = await _supabase.from(TABLE).insert(payload);
+      if (error) throw error;
+
+      clShowToast(`Đã tạo ${DEFAULT_TASKS.length} task mẫu cho ngày ${fdt(targetDay)}`, 'success');
+
+      if (!targetDay.startsWith(clMonthFilter.value || clThisMonthStr())) {
+        clMonthFilter.value = targetDay.slice(0, 7);
+      }
+      clDayFilter.value = targetDay;
+      await clFetchRows();
+    } catch (err) {
+      console.error('[Tab4] repeat error:', err);
+      const msg = handleSupabaseError(err, 'tạo danh sách mẫu');
+      clShowToast(msg, 'error');
+      clSetStatus('Lỗi tạo danh sách mẫu');
+    }
+  }
+
+  async function clDeleteRow(id) {
+    if (!_supabase) return;
+    if (!confirm('Bạn có chắc muốn xoá task này?')) return;
+
+    clSetStatus('Đang xoá...');
+    try {
+      const { error } = await _supabase.from(TABLE).delete().eq('id', id);
+      if (error) throw error;
+
+      currentRows = currentRows.filter(r => String(r.id) !== String(id));
+      clRenderTable();
+      clRenderStats();
+      clShowToast('Đã xoá task', 'success');
+      clSetStatus(`Hiển thị ${currentRows.length} task`);
+    } catch (err) {
+      console.error('[Tab4] delete error:', err);
+      const msg = handleSupabaseError(err, 'xoá');
+      clShowToast(msg, 'error');
+    }
+  }
+
+  function clRenderStats() {
+    const total = currentRows.length;
+    const done = currentRows.filter(r => r.Status).length;
+    const rate = total ? Math.round((done / total) * 100) : 0;
+    const days = new Set(currentRows.map(r => toDateOnly(r.Day)).filter(Boolean)).size;
+
+    $('clStatTotal').textContent = total;
+    $('clStatDone').textContent = done;
+    $('clStatRate').textContent = rate + '%';
+    $('clStatDays').textContent = days;
+  }
+
+  /* ============================================================
+     INITIALIZATION TAB 1
+     ============================================================ */
+  function initTab1() {
+    const hourSelect = $('filterHour');
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement('option');
+      opt.value = String(h);
+      opt.textContent = hl(h);
+      hourSelect.appendChild(opt);
+    }
+
+    const dropZone = $('dropZone');
+    const fileInput = $('fileInput');
+    fileInput.onchange = e => { if (e.target.files.length) loadFiles([...e.target.files]); };
+    dropZone.ondragover = e => { e.preventDefault(); dropZone.classList.add('dragover'); };
+    dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+    dropZone.ondrop = e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) loadFiles([...e.dataTransfer.files]);
+    };
+    dropZone.onclick = e => { if (e.target.tagName !== 'INPUT') fileInput.click(); };
+
+    $('filterBy').onchange = e => { BY = e.target.value; render(); };
+    $('filterDay').onchange = () => {
+      render();
+      if ($('tab2').classList.contains('active')) renderWeekTab();
+      if ($('tab3').classList.contains('active')) renderMonthTab();
+    };
+    $('filterHour').onchange = render;
+    $('filterStaff').oninput = render;
+    $('filterCode').oninput = updateLookup;
+    $('fireIds').oninput = render;
+    $('threshold10').onchange = e => { TH.f10 = +e.target.value || 10; render(); };
+    $('thresholdU3').onchange = e => { TH.u3 = +e.target.value || 3; render(); };
+
+    $('btnFillSuggestion').onclick = () => {
+      const sel = $('filterDay').value;
+      $('fireIds').value = suggestFireIds(allEvents.filter(e => e.ng === sel)).join(', ');
+      render();
+    };
+
+    $('btnExport').onclick = () => {
+      if (!allEvents.length) { alert('Chưa có dữ liệu để xuất.'); return; }
+      alert('Chức năng xuất Excel giữ nguyên như bản trước.');
+    };
+    $('btnNewFile').onclick = () => {
+      allEvents = [];
+      shiftOverrides = {};
+      $('appSection').classList.add('hidden');
+      $('uploadSection').classList.remove('hidden');
+      fileInput.value = '';
+    };
+  }
+
+  initTab1();
+
+})();
+</script>
+</body>
+</html>
